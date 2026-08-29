@@ -1,0 +1,12 @@
+{
+  "name":"星灯りの勇者",
+  "short_name":"星灯り",
+  "description":"失われた五つの星をめぐるレトロJRPG",
+  "start_url":"./",
+  "scope":"./",
+  "display":"standalone",
+  "orientation":"any",
+  "background_color":"#090d20",
+  "theme_color":"#0b1026",
+  "icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
