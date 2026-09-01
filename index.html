@@ -14,7 +14,18 @@
 </head>
 <body>
   <main id="app" aria-live="polite">
-    <section id="title-screen" class="screen active">
+    <section id="intro-screen" class="screen active">
+      <div class="intro-sky" aria-hidden="true"><i class="intro-moon"></i><i class="intro-meteor"></i><div class="intro-land"><span></span></div><i class="intro-hero"></i></div>
+      <div class="intro-copy"><p id="intro-text">かつて、夜空には五つの星が輝いていた。</p></div>
+      <button id="begin-intro" class="menu-button primary">物語を始める</button>
+      <button id="skip-intro" class="skip-button">スキップ ▶</button>
+    </section>
+    <section id="ending-screen" class="screen">
+      <div class="ending-sky" aria-hidden="true"><div class="ending-stars"><i></i><i></i><i></i><i></i><i></i></div><div class="ending-horizon"></div><div class="ending-party"><i></i><i></i><i></i></div></div>
+      <div class="ending-copy"><p id="ending-line">五つの星は、ふたたび夜空へ。</p><h2>星灯りの勇者</h2><strong>FIN</strong></div>
+      <button id="skip-ending" class="skip-button">スキップ ▶</button>
+    </section>
+    <section id="title-screen" class="screen">
       <div class="stars" aria-hidden="true"></div>
       <div class="title-wrap">
         <p class="eyebrow">A RETRO FANTASY RPG</p>
@@ -26,7 +37,7 @@
           <button id="chapter-select" class="menu-button">章から遊ぶ</button>
           <button id="open-help" class="menu-button">遊びかた</button>
         </nav>
-        <p class="version">COMPLETE EDITION 1.0.2</p>
+        <p class="version">COMPLETE EDITION 1.1.1</p>
       </div>
     </section>
 
@@ -51,13 +62,13 @@
       <div id="message-box" class="message-box hidden" role="dialog" aria-modal="true">
         <strong id="speaker"></strong><p id="message-text"></p><span>▼</span>
       </div>
-      <div id="choice-box" class="choice-box hidden"></div>
       <div class="mobile-controls" aria-label="タッチ操作">
         <div class="dpad">
           <button data-key="up" aria-label="上">▲</button><button data-key="left" aria-label="左">◀</button>
+          <button class="action" data-action="confirm" aria-label="決定">決定</button>
           <button data-key="down" aria-label="下">▼</button><button data-key="right" aria-label="右">▶</button>
         </div>
-        <div class="action-pad"><button data-action="menu">M</button><button class="action" data-action="confirm">A</button></div>
+        <div class="action-pad"><button data-action="save">セーブ</button><button data-action="settings">設定</button></div>
       </div>
     </section>
 
@@ -73,6 +84,7 @@
       </div>
     </section>
   </main>
+  <div id="choice-box" class="choice-box hidden"></div>
 
   <dialog id="main-menu" class="panel-dialog">
     <div class="dialog-title"><h2>旅のメニュー</h2><button data-close>×</button></div>
