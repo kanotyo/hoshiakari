@@ -32,7 +32,7 @@ const enemies = {
 };
 
 const freshState = () => ({version:1,chapter:0,step:0,x:10,y:11,dir:"up",level:1,xp:0,nextXp:24,hp:34,maxHp:34,mp:12,maxMp:12,atk:8,def:4,gold:10,
-  items:{"薬草":3,"星の霊薬":1,"世界樹の葉":0},stars:[],playTime:0,battles:0,started:Date.now(),settings:{sound:true,shake:true},flags:{},ending:false});
+  items:{"薬草":3,"星の霊薬":1,"世界樹の葉":0},stars:[],drops:{},moves:0,lastEvent:"星見村で目を覚ました",playTime:0,battles:0,started:Date.now(),settings:{sound:true,shake:true},flags:{},ending:false});
 let state = freshState(), mode = "title", dialogQueue = [], afterDialog = null, battle = null, lastFrame = 0, toastTimer;
 let audioCtx=null,musicTimer=null,musicKind="",musicStep=0;
 const music={
@@ -54,14 +54,14 @@ ctx.imageSmoothingEnabled = false;
 function showScreen(id){ $$(".screen").forEach(s=>s.classList.toggle("active",s.id===id)); }
 function hasSave(){ try{return !!localStorage.getItem(SAVE_KEY)}catch{return false} }
 function save(silent=false){ try{state.savedAt=Date.now();localStorage.setItem(SAVE_KEY,JSON.stringify(state));if(!silent) toast("冒険の記録を保存しました");return true}catch{toast("保存できませんでした");return false} }
-function load(){ try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return false;state={...freshState(),...JSON.parse(raw)};state.started=Date.now();return true}catch{return false} }
+function load(){ try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return false;state={...freshState(),...JSON.parse(raw)};state.drops||={};state.started=Date.now();return true}catch{return false} }
 function fmtTime(sec){return `${Math.floor(sec/3600)}:${String(Math.floor(sec/60)%60).padStart(2,"0")}`}
 function totalTime(){return (state.playTime||0)+Math.floor((Date.now()-state.started)/1000)}
 
 function startGame(isContinue=false, chapter=0){
   if(!isContinue){state=freshState();state.chapter=chapter;if(chapter){boostForChapter(chapter);state.stars=chapters.slice(0,chapter).map(c=>c.reward)} }
-  mode="world"; showScreen("game-screen"); resetPosition(); updateUI(); draw();switchMusic("world");
-  if(!isContinue || (state.step===0&&!state.flags[`intro${state.chapter}`])) introChapter(); else toast("冒険を再開しました");
+  mode="world";showScreen("game-screen");if(!isContinue)resetPosition();updateUI();draw();switchMusic("world");
+  if(!isContinue || (state.step===0&&!state.flags[`intro${state.chapter}`])) introChapter(); else showRecap();
 }
 function boostForChapter(ch){ state.level=1+ch*3;state.maxHp=34+ch*24;state.hp=state.maxHp;state.maxMp=12+ch*9;state.mp=state.maxMp;state.atk=8+ch*8;state.def=4+ch*5;state.gold=10+ch*40; }
 function resetPosition(){state.x=10;state.y=11;state.dir="up"}
@@ -95,7 +95,7 @@ function move(dx,dy,dir){
     if(state.step===3&&state.chapter<4)return advanceChapter();
     return showDialog([{speaker:"門番",text:state.step===0?"旅立つ前に、村の北にいる人から話を聞いてください。":state.step===1?"西の星碑に、強い魔物の気配があります。":state.step===2?"北東の祭壇で星の光を取り戻せば、門を開けましょう。":"この先は、まだ深い闇に閉ざされています。"}]);
   }
-  const nx=state.x+dx,ny=state.y+dy;if(!mapBlocked(nx,ny)){state.x=nx;state.y=ny;draw()}
+  const nx=state.x+dx,ny=state.y+dy;if(!mapBlocked(nx,ny)){state.x=nx;state.y=ny;state.moves=(state.moves||0)+1;collectDrop();draw();if(state.moves%12===0){save(true);toast("ここまで自動セーブしました")}}
 }
 
 function draw(){
@@ -104,11 +104,17 @@ function draw(){
   ctx.fillStyle="#cbb481";ctx.fillRect(9*TILE,0,3*TILE,480);ctx.fillRect(0,6*TILE,640,3*TILE);
   ctx.fillStyle="#6f583d";[[2,2],[3,2],[17,2],[18,2],[2,11],[17,11],[7,5],[8,5],[12,9],[13,9],[6,12],[14,12]].forEach(([x,y])=>{ctx.fillRect(x*TILE+5,y*TILE+4,22,25);ctx.fillStyle="#254d32";ctx.fillRect(x*TILE,y*TILE,32,18);ctx.fillStyle="#6f583d"});
   drawMarker(10,7,ch.npc,"#f3d36b");drawMarker(4,4,state.step===1?"!":"星碑",state.step===1?"#ffde65":"#7f9eca");drawMarker(15,3,state.step===2?"!":"祭壇",state.step===2?"#ef7680":"#ba9fe5");
+  chapterDrops().forEach(([x,y])=>{if(state.drops[dropKey(x,y)])return;ctx.fillStyle="#fff7a2";ctx.font="18px serif";ctx.fillText("✦",x*TILE+16,y*TILE+22)});
   ctx.fillStyle=state.step===3?"#ffd866":"#d8d3bf";ctx.fillRect(9*TILE,14*TILE,3*TILE,8);ctx.fillStyle="#081024";ctx.fillRect(9*TILE+8,14*TILE,3*TILE-16,8);ctx.fillStyle="#fff";ctx.font="11px sans-serif";ctx.fillText("南門",10.5*TILE,13.75*TILE);
-  drawHero(state.x,state.y); 
+  drawHero(state.x,state.y);updateCamera();
 }
+function updateCamera(){requestAnimationFrame(()=>{if(innerWidth>760||innerWidth>innerHeight){canvas.style.removeProperty("--camera-x");return}const wrap=canvas.parentElement,renderWidth=canvas.getBoundingClientRect().width,viewWidth=wrap.clientWidth,heroX=(state.x+.5)/COLS*renderWidth;const left=Math.max(viewWidth-renderWidth,Math.min(0,viewWidth/2-heroX));canvas.style.setProperty("--camera-x",`${Math.round(left)}px`)})}
 function drawMarker(x,y,label,color){ctx.fillStyle="#0008";ctx.fillRect(x*TILE-8,y*TILE-17,48,14);ctx.font="10px sans-serif";ctx.textAlign="center";ctx.fillStyle="#fff";ctx.fillText(label,x*TILE+16,y*TILE-7);ctx.fillStyle=color;ctx.fillRect(x*TILE+8,y*TILE+7,16,20);ctx.fillStyle="#fff";ctx.fillRect(x*TILE+11,y*TILE+10,4,4);ctx.fillRect(x*TILE+18,y*TILE+10,4,4)}
 function drawHero(x,y){const px=x*TILE,py=y*TILE;ctx.fillStyle="#0005";ctx.fillRect(px+7,py+25,20,5);ctx.fillStyle="#f0c891";ctx.fillRect(px+9,py+4,14,10);ctx.fillStyle="#243f85";ctx.fillRect(px+7,py+14,18,15);ctx.fillStyle="#ffd866";ctx.fillRect(px+13,py+18,6,6);ctx.fillStyle="#172855";ctx.fillRect(px+8,py+29,7,3);ctx.fillRect(px+19,py+29,7,3)}
+function chapterDrops(){return [[3,10],[16,8],[11,2]]}
+function dropKey(x,y){return `${state.chapter}-${x}-${y}`}
+function dropCount(){return chapterDrops().filter(([x,y])=>state.drops[dropKey(x,y)]).length}
+function collectDrop(){const found=chapterDrops().find(([x,y])=>x===state.x&&y===state.y&&!state.drops[dropKey(x,y)]);if(!found)return;state.drops[dropKey(...found)]=true;state.gold+=5;state.lastEvent="星のしずくを見つけた";const count=dropCount();if(count===3){state.gold+=20;state.hp=state.maxHp;state.mp=state.maxMp;toast("星のしずくが揃った！ 全回復＋20星貨")}else toast(`星のしずく ${count}/3　5星貨を入手`);updateUI();save(true)}
 
 function startBattle(name,boss){
   const base=enemies[name], scale=1; battle={name,boss,maxHp:Math.round(base.hp*scale),hp:Math.round(base.hp*scale),atk:base.atk,def:base.def,xp:base.xp,gold:base.gold,color:base.color,guard:false,busy:false};
@@ -139,16 +145,16 @@ function enemyTurn(){
 function winBattle(){
   state.battles++;state.xp+=battle.xp;state.gold+=battle.gold;const boss=battle.boss;battleLog(`${battle.name}を倒した！ ${battle.xp} EXPを獲得。`);while(state.xp>=state.nextXp)levelUp();
   setTimeout(()=>{showScreen("game-screen");mode="world";switchMusic("world");state.hp=Math.min(state.maxHp,state.hp+Math.ceil(state.maxHp*.25));state.mp=Math.min(state.maxMp,state.mp+3);
-    if(boss)finishChapter();else{state.step=2;showDialog([{speaker:"アステル",text:"魔物の影から星の道が現れた。北東の祭壇へ向かおう。"}])}updateUI();draw();save(true)},1000);
+    if(boss)finishChapter();else{state.step=2;state.lastEvent=`${battle.name}を倒した`;showDialog([{speaker:"アステル",text:"魔物の影から星の道が現れた。北東の祭壇へ向かおう。"}])}updateUI();draw();save(true)},1000);
 }
 function levelUp(){state.xp-=state.nextXp;state.level++;state.nextXp=Math.round(state.nextXp*1.45);state.maxHp+=10;state.maxMp+=4;state.atk+=3;state.def+=2;state.hp=state.maxHp;state.mp=state.maxMp}
 function gameOver(){battleLog("アステルは力尽きた……");setTimeout(()=>{state.hp=state.maxHp;state.mp=state.maxMp;state.gold=Math.max(0,state.gold-Math.floor(state.gold*.15));showScreen("game-screen");mode="world";switchMusic("world");resetPosition();updateUI();draw();showDialog([{speaker:"星の声",text:"まだ、あなたの旅は終わっていない……。"}])},1100)}
 function finishChapter(){
-  const ch=chapters[state.chapter];state.stars.push(ch.reward);state.step=3;
+  const ch=chapters[state.chapter];state.stars.push(ch.reward);state.step=3;state.lastEvent=`${ch.reward}を取り戻した`;
   if(state.chapter===4){state.ending=true;save(true);ending();return}
   showDialog([{speaker:"星の声",text:`${ch.reward}が夜空へ還った。`},{speaker:ch.npc,text:"ありがとう、アステル。南門が開きました。門を抜ければ、次の地へ進めます。"}],()=>{state.x=10;state.y=12;state.dir="down";updateUI();draw();save(true)});
 }
-function advanceChapter(){state.chapter++;state.step=0;resetPosition();state.hp=state.maxHp;state.mp=state.maxMp;updateUI();draw();save(true);introChapter()}
+function advanceChapter(){state.chapter++;state.step=0;state.lastEvent="南門を抜け、次の地へ着いた";resetPosition();state.hp=state.maxHp;state.mp=state.maxMp;updateUI();draw();save(true);introChapter()}
 function ending(){
   showScreen("game-screen");mode="dialog";switchMusic("ending");showDialog([{speaker:"ヴェイル",text:"そうか……星は、空にあるから輝くのではない。誰かを想う心に灯るのか。"},{speaker:"アステル",text:"一緒に帰ろう。夜があるから、星灯りは見えるんだ。"},{speaker:"",text:"五つの星は空へ還り、長い夜は明けた。人々はもう、星に願うだけではない。互いの心に灯りを見つけた。"}],showEndingAnimation)}
 let endingTimer=null;
@@ -157,8 +163,10 @@ function showEndingResult(){clearTimeout(endingTimer);openModal(`<h2>星灯り�
 $("#skip-ending").onclick=showEndingResult;
 
 function updateUI(){
-  const ch=chapters[state.chapter];$("#area-name").textContent=ch.area;$("#chapter-label").textContent=ch.title.split("　")[0];$("#hero-level").textContent=`Lv ${state.level}`;$("#hp-text").textContent=`${state.hp}/${state.maxHp}`;$("#mp-text").textContent=`${state.mp}/${state.maxMp}`;$("#hp-bar").style.width=`${state.hp/state.maxHp*100}%`;$("#mp-bar").style.width=`${state.mp/state.maxMp*100}%`;$("#atk-text").textContent=state.atk;$("#def-text").textContent=state.def;$("#gold-text").textContent=state.gold;$("#exp-text").textContent=state.xp;$("#quest-text").textContent=[ch.quest,"西の星碑を調べよう","北東の祭壇へ進もう",state.chapter<4?"南門から次の地へ進もう":"星灯りを見届けよう"][state.step]||ch.quest;
+  const ch=chapters[state.chapter];$("#area-name").textContent=ch.area;$("#chapter-label").textContent=ch.title.split("　")[0];$("#hero-level").textContent=`Lv ${state.level}`;$("#hp-text").textContent=`${state.hp}/${state.maxHp}`;$("#mp-text").textContent=`${state.mp}/${state.maxMp}`;$("#hp-bar").style.width=`${state.hp/state.maxHp*100}%`;$("#mp-bar").style.width=`${state.mp/state.maxMp*100}%`;$("#atk-text").textContent=state.atk;$("#def-text").textContent=state.def;$("#gold-text").textContent=state.gold;$("#exp-text").textContent=state.xp;$("#quest-text").textContent=currentQuest();$("#quest-time").textContent=`目安 ${[3,5,5,1][state.step]||3}分`;$("#side-quest").textContent=`寄り道：星のしずく ${dropCount()}/3`;
 }
+function currentQuest(){const ch=chapters[state.chapter];return [ch.quest,"西の星碑を調べよう","北東の祭壇へ進もう",state.chapter<4?"南門から次の地へ進もう":"星灯りを見届けよう"][state.step]||ch.quest}
+function showRecap(){openModal(`<h2>おかえりなさい</h2><p><strong>前回：</strong>${state.lastEvent||"冒険の途中"}</p><p><strong>現在地：</strong>${chapters[state.chapter].area}</p><p><strong>次の目標（約${[3,5,5,1][state.step]||3}分）：</strong><br>${currentQuest()}</p><p>星のしずく ${dropCount()}/3</p><div class="modal-buttons"><button id="resume-now">冒険を再開</button></div>`);$("#resume-now").onclick=()=>{$("#modal").close();toast("短い時間でも、よい旅を！")}}
 function toast(text){const t=$("#toast");t.textContent=text;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),1800)}
 function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a}
 function shake(){if(!state.settings.shake)return;$("#battle-screen").animate([{transform:"translateX(-5px)"},{transform:"translateX(5px)"},{transform:"none"}],{duration:180})}
@@ -191,7 +199,7 @@ $("#menu-toggle").onclick=()=>openMenu();$$('[data-close]').forEach(b=>b.onclick
 $$('#battle-actions button').forEach(b=>b.onclick=()=>command(b.dataset.command));
 document.addEventListener("keydown",e=>{if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault();if(mode==="dialog"&&["Enter"," ","z","Z"].includes(e.key))return nextDialog();if(mode!=="world"){if(e.key==="Escape"&&$("#main-menu").open)$("#main-menu").close();return}const k=e.key.toLowerCase();if(k==="arrowup"||k==="w")move(0,-1,"up");else if(k==="arrowdown"||k==="s")move(0,1,"down");else if(k==="arrowleft"||k==="a")move(-1,0,"left");else if(k==="arrowright"||k==="d")move(1,0,"right");else if(["enter"," ","z"].includes(k))interact();else if(["escape","x"].includes(k))openMenu()});
 $$('.mobile-controls button').forEach(b=>{const fire=e=>{e.preventDefault();if(b.dataset.key){const d={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]}[b.dataset.key];move(...d,b.dataset.key)}else if(b.dataset.action==="confirm")interact();else if(b.dataset.action==="save")save();else if(b.dataset.action==="settings")openMenu("settings")};b.addEventListener("pointerdown",fire)});
-window.addEventListener("pagehide",()=>{if(mode!=="title")save(true)});document.addEventListener("visibilitychange",()=>{if(document.hidden&&mode!=="title")save(true)});
+window.addEventListener("pagehide",()=>{if(mode!=="title")save(true)});document.addEventListener("visibilitychange",()=>{if(document.hidden&&mode!=="title")save(true)});window.addEventListener("resize",updateCamera);
 if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 document.addEventListener("pointerdown",()=>{unlockAudio();if(!musicTimer)switchMusic(mode==="title"?"title":mode==="battle"?(battle?.boss?"boss":"battle"):state.ending?"ending":"world")},{once:true});
 if(sessionStorage.getItem("hoshiakariIntroSeen")){mode="title";showScreen("title-screen")}refreshTitle();draw();
